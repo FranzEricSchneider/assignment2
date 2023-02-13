@@ -1,5 +1,6 @@
-import torch
+import mcubes
 import numpy as np
+import torch
 import torch.nn.functional as F
 
 
@@ -21,7 +22,7 @@ def voxelize_xyz(xyz_ref, Z, Y, X, already_mem=False):
     vox = get_occupancy(xyz_mem, Z, Y, X)
     return vox
 
-    
+
 def apply_4x4(RT, xyz):
     B, N, _ = list(xyz.shape)
     ones = torch.ones_like(xyz[:,:,0:1])
@@ -33,9 +34,11 @@ def apply_4x4(RT, xyz):
     xyz2 = xyz2[:,:,:3]
     return xyz2
 
+
 def eye_4x4(B, device='cpu'):
     rt = torch.eye(4, device=torch.device(device)).view(1,4,4).repeat([B, 1, 1])
     return rt
+
 
 def Ref2Mem(xyz, Z, Y, X):
     # xyz is B x N x 3, in ref coordinates
@@ -44,6 +47,7 @@ def Ref2Mem(xyz, Z, Y, X):
     mem_T_ref = get_mem_T_ref(B, Z, Y, X)
     xyz = apply_4x4(mem_T_ref, xyz)
     return xyz
+
 
 def get_occupancy(xyz, Z, Y, X):
     # xyz is B x N x 3 and in mem coords
@@ -98,8 +102,10 @@ def get_occupancy(xyz, Z, Y, X):
     # B x 1 x Z x Y x X
     return voxels
 
+
 def matmul2(mat1, mat2):
     return torch.matmul(mat1, mat2)
+
 
 def Mem2Ref(xyz_mem, Z, Y, X, device='cpu'):
     # xyz is B x N x 3, in mem coordinates
@@ -110,6 +116,7 @@ def Mem2Ref(xyz_mem, Z, Y, X, device='cpu'):
     xyz_ref = apply_4x4(ref_T_mem, xyz_mem)
     return xyz_ref
 
+
 def get_ref_T_mem(B, Z, Y, X, device='cpu'):
     mem_T_ref = get_mem_T_ref(B, Z, Y, X, device=device)
     # note safe_inverse is inapplicable here,
@@ -117,10 +124,11 @@ def get_ref_T_mem(B, Z, Y, X, device='cpu'):
     ref_T_mem = mem_T_ref.inverse()
     return ref_T_mem
 
+
 def get_mem_T_ref(B, Z, Y, X, device='cpu'):
     # sometimes we want the mat itself
     # note this is not a rigid transform
-    
+
     # for interpretability, let's construct this in two steps...
 
     # translation
@@ -132,15 +140,16 @@ def get_mem_T_ref(B, Z, Y, X, device='cpu'):
     VOX_SIZE_X = (XMAX-XMIN)/float(X)
     VOX_SIZE_Y = (YMAX-YMIN)/float(Y)
     VOX_SIZE_Z = (ZMAX-ZMIN)/float(Z)
-    
+
     # scaling
     mem_T_center = eye_4x4(B, device=device)
     mem_T_center[:,0,0] = 1./VOX_SIZE_X
     mem_T_center[:,1,1] = 1./VOX_SIZE_Y
     mem_T_center[:,2,2] = 1./VOX_SIZE_Z
     mem_T_ref = matmul2(mem_T_center, center_T_ref)
-    
+
     return mem_T_ref
+
 
 def get_inbounds(xyz, Z, Y, X, already_mem=False):
     # xyz is B x N x 3
@@ -150,12 +159,32 @@ def get_inbounds(xyz, Z, Y, X, already_mem=False):
     x = xyz[:,:,0]
     y = xyz[:,:,1]
     z = xyz[:,:,2]
-    
+
     x_valid = (x>-0.5).byte() & (x<float(X-0.5)).byte()
     y_valid = (y>-0.5).byte() & (y<float(Y-0.5)).byte()
     z_valid = (z>-0.5).byte() & (z<float(Z-0.5)).byte()
-    
+
     inbounds = x_valid & y_valid & z_valid
     return inbounds.bool()
 
 
+def voxels_to_mesh(voxels, minval=-1, maxval=1):
+
+    voxels_cpu = voxels.detach().cpu()
+    verts, faces = mcubes.marching_cubes(
+        mcubes.smooth(voxels_cpu),
+        isovalue=0,
+    )
+
+    # Cast as the tensor types we need
+    verts = torch.tensor(verts).float()
+    faces = torch.tensor(faces.astype(int))
+
+    # And re-size the vertices to be in meters, not "index values"
+    assert voxels_cpu.shape[0] == voxels_cpu.shape[1]
+    assert voxels_cpu.shape[0] == voxels_cpu.shape[2]
+    steps = voxels_cpu.shape[0]
+    voxel_size = (maxval - minval) / steps
+    verts = verts * voxel_size + minval
+
+    return verts, faces
