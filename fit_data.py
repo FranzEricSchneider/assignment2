@@ -13,7 +13,7 @@ import dataset_location
 import torch
 
 from utils_vox import voxels_to_mesh
-from viz import hzip, spinning_mesh
+from viz import hzip, spinning_mesh, spinning_points
 
 
 def get_args_parser():
@@ -25,7 +25,7 @@ def get_args_parser():
     parser.add_argument('-n', '--n_points', default=5000, type=int)
     parser.add_argument('-c', '--w_chamfer', default=1.0, type=float)
     parser.add_argument('-s', '--w_smooth', default=0.1, type=float)
-    parser.add_argument('-d', '--device', default='cuda', type=str)
+    parser.add_argument('-d', '--device', default='cuda:0', type=str)
     return parser
 
 
@@ -65,29 +65,6 @@ def fit_mesh(mesh_src, mesh_tgt, args):
     print('Done!')
 
 
-def fit_pointcloud(pointclouds_src, pointclouds_tgt, args):
-    start_iter = 0
-    start_time = time.time()
-    optimizer = torch.optim.Adam([pointclouds_src], lr = args.lr)
-    for step in range(start_iter, args.max_iter):
-        iter_start_time = time.time()
-
-        loss = losses.chamfer_loss(pointclouds_src, pointclouds_tgt)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        total_time = time.time() - start_time
-        iter_time = time.time() - iter_start_time
-
-        loss_vis = loss.cpu().item()
-
-        print("[%4d/%4d]; ttime: %.0f (%.2f); loss: %.3f" % (step, args.max_iter, total_time,  iter_time, loss_vis))
-
-    print('Done!')
-
-
 def fit_voxel(voxels_src, voxels_tgt, args):
     start_iter = 0
     start_time = time.time()
@@ -113,6 +90,34 @@ def fit_voxel(voxels_src, voxels_tgt, args):
     gt_images = spinning_mesh(*voxels_to_mesh(voxels_tgt[0]), **kwargs)
     pred_images = spinning_mesh(*voxels_to_mesh(voxels_src[0]), **kwargs)
     imageio.mimsave("assignment2_q1_p1.gif", hzip(gt_images, pred_images), fps=20)
+    print('Saved!')
+
+
+def fit_pointcloud(pointclouds_src, pointclouds_tgt, args):
+    start_iter = 0
+    start_time = time.time()
+    optimizer = torch.optim.Adam([pointclouds_src], lr = args.lr)
+    for step in range(start_iter, args.max_iter):
+        iter_start_time = time.time()
+
+        loss = losses.chamfer_loss(pointclouds_src, pointclouds_tgt)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        total_time = time.time() - start_time
+        iter_time = time.time() - iter_start_time
+
+        loss_vis = loss.cpu().item()
+
+        if step % args.log_freq == 0:
+            print("[%4d/%4d]; ttime: %.0f (%.2f); loss: %.3f" % (step, args.max_iter, total_time,  iter_time, loss_vis))
+
+    kwargs = {"device": args.device, "dist": 1}
+    gt_images = spinning_points(pointclouds_src[0], **kwargs)
+    pred_images = spinning_points(pointclouds_tgt[0], **kwargs)
+    imageio.mimsave("assignment2_q1_p2.gif", hzip(gt_images, pred_images), fps=20)
     print('Saved!')
 
 
@@ -160,5 +165,4 @@ def train_model(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Model Fit', parents=[get_args_parser()])
     args = parser.parse_args()
-    print("HELLO")
     train_model(args)
