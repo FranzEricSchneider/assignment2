@@ -81,6 +81,11 @@ def spinning_mesh(verts, faces, device, image_size=256, num_views=60, dist=4,
     assert len(verts.shape) == 2
     assert len(faces.shape) == 2
 
+    if verts.device != "cpu":
+        verts = verts.detach().cpu()
+    if faces.device != "cpu":
+        faces = faces.detach().cpu()
+
     # Colormap
     norms = numpy.linalg.norm(verts, axis=1)
     scalarmap = cm.ScalarMappable(
@@ -124,7 +129,8 @@ def spinning_points(points, device, image_size=256, num_views=60, dist=4,
     assert len(points.shape) == 2
 
     # Get to the CPU
-    points = points.detach().cpu()
+    if points.device != "cpu":
+        points = points.detach().cpu()
 
     # Colormap
     norms = numpy.linalg.norm(points, axis=1)

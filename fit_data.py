@@ -29,42 +29,6 @@ def get_args_parser():
     return parser
 
 
-def fit_mesh(mesh_src, mesh_tgt, args):
-    start_iter = 0
-    start_time = time.time()
-
-    deform_vertices_src = torch.zeros(mesh_src.verts_packed().shape, requires_grad=True, device='cuda')
-    optimizer = torch.optim.Adam([deform_vertices_src], lr = args.lr)
-    print("Starting training !")
-    for step in range(start_iter, args.max_iter):
-        iter_start_time = time.time()
-
-        new_mesh_src = mesh_src.offset_verts(deform_vertices_src)
-
-        sample_trg = sample_points_from_meshes(mesh_tgt, args.n_points)
-        sample_src = sample_points_from_meshes(new_mesh_src, args.n_points)
-
-        loss_reg = losses.chamfer_loss(sample_src, sample_trg)
-        loss_smooth = losses.smoothness_loss(new_mesh_src)
-
-        loss = args.w_chamfer * loss_reg + args.w_smooth * loss_smooth
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        total_time = time.time() - start_time
-        iter_time = time.time() - iter_start_time
-
-        loss_vis = loss.cpu().item()
-
-        print("[%4d/%4d]; ttime: %.0f (%.2f); loss: %.3f" % (step, args.max_iter, total_time,  iter_time, loss_vis))
-
-    mesh_src.offset_verts_(deform_vertices_src)
-
-    print('Done!')
-
-
 def fit_voxel(voxels_src, voxels_tgt, args):
     start_iter = 0
     start_time = time.time()
@@ -118,6 +82,55 @@ def fit_pointcloud(pointclouds_src, pointclouds_tgt, args):
     gt_images = spinning_points(pointclouds_src[0], **kwargs)
     pred_images = spinning_points(pointclouds_tgt[0], **kwargs)
     imageio.mimsave("assignment2_q1_p2.gif", hzip(gt_images, pred_images), fps=20)
+    print('Saved!')
+
+
+def fit_mesh(mesh_src, mesh_tgt, args):
+    start_iter = 0
+    start_time = time.time()
+
+    deform_vertices_src = torch.zeros(
+        mesh_src.verts_packed().shape,
+        requires_grad=True,
+        device=args.device,
+    )
+    optimizer = torch.optim.Adam([deform_vertices_src], lr=args.lr)
+    print("Starting training !")
+    for step in range(start_iter, args.max_iter):
+        iter_start_time = time.time()
+
+        new_mesh_src = mesh_src.offset_verts(deform_vertices_src)
+
+        sample_trg = sample_points_from_meshes(mesh_tgt, args.n_points)
+        sample_src = sample_points_from_meshes(new_mesh_src, args.n_points)
+
+        loss_reg = losses.chamfer_loss(sample_src, sample_trg)
+        loss_smooth = losses.smoothness_loss(new_mesh_src)
+
+        loss = args.w_chamfer * loss_reg + args.w_smooth * loss_smooth
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        total_time = time.time() - start_time
+        iter_time = time.time() - iter_start_time
+
+        loss_vis = loss.cpu().item()
+
+        if step % args.log_freq == 0:
+            print("[%4d/%4d]; ttime: %.0f (%.2f); loss: %.3f" % (step, args.max_iter, total_time,  iter_time, loss_vis))
+
+    mesh_src.offset_verts_(deform_vertices_src)
+
+    kwargs = {"device": args.device, "dist": 1}
+    gt_images = spinning_mesh(mesh_tgt.verts_list()[0],
+                              mesh_tgt.faces_list()[0],
+                              **kwargs)
+    pred_images = spinning_mesh(mesh_src.verts_list()[0],
+                                mesh_src.faces_list()[0],
+                                **kwargs)
+    imageio.mimsave("assignment2_q1_p3.gif", hzip(gt_images, pred_images), fps=20)
     print('Saved!')
 
 
