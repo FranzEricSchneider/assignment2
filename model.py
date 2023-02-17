@@ -13,7 +13,7 @@ class SingleViewto3D(nn.Module):
         super(SingleViewto3D, self).__init__()
         self.device = args.device
         if not args.load_feat:
-            vision_model = torchvision_models.__dict__[args.arch](pretrained=True)
+            vision_model = torchvision_models.__dict__[args.arch](weights=True)
             self.encoder = torch.nn.Sequential(*(list(vision_model.children())[:-1]))
             self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
 
@@ -110,12 +110,11 @@ class VoxNetwork(nn.Module):
             nn.ConvTranspose3d(in_channels=4, out_channels=1, kernel_size=3, stride=2, padding=0, output_padding=1), # 15 > 31+1
             nn.Sigmoid()
         )
+        # TODO: Read the paper: https://arxiv.org/pdf/1603.08637.pdf
         # TODO: Make overfit mechanism
-        # TODO: Print network size
+        # TODO: Hook it up to wandb
         # TODO: Add non-linearities
         # TODO: Make it DEEPER
-        # TODO: Read the paper: https://arxiv.org/pdf/1603.08637.pdf
-        # TODO: Hook it up to wandb
         # TODO: Try batchnorms
 
 

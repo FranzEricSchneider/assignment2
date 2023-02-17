@@ -1,12 +1,14 @@
 import argparse
 import time
+from  pytorch3d.datasets.r2n2.utils import collate_batched_R2N2
+from pytorch3d.ops import sample_points_from_meshes
 import torch
+from torchsummaryX import summary
+
+import dataset_location
+import losses
 from model import SingleViewto3D
 from r2n2_custom import R2N2
-from  pytorch3d.datasets.r2n2.utils import collate_batched_R2N2
-import dataset_location
-from pytorch3d.ops import sample_points_from_meshes
-import losses
 
 
 def get_args_parser():
@@ -78,6 +80,12 @@ def train_model(args):
     model =  SingleViewto3D(args)
     model.to(args.device)
     model.train()
+
+    # ============ print model information ... ============
+    summary_dict = next(train_loader)
+    summary_ims, _ = preprocess(summary_dict, args)
+    model_summary = summary(model, summary_ims.to(args.device), args)
+    print(model_summary)
 
     # ============ preparing optimizer ... ============
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
