@@ -154,9 +154,7 @@ class VoxNetwork(nn.Module):
             nn.Dropout(p=dropout),
             nn.Sigmoid()
         )
-        # TODO: Read the paper: https://arxiv.org/pdf/1603.08637.pdf
         # TODO: Make overfit mechanism
-        # TODO: Hook it up to wandb
         # TODO: Make it DEEPER (figure out why crashing)
         # TODO: Try on AWS
 

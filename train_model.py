@@ -1,10 +1,13 @@
 import argparse
 import gc
-import time
+import json
+from pathlib import Path
 from  pytorch3d.datasets.r2n2.utils import collate_batched_R2N2
 from pytorch3d.ops import sample_points_from_meshes
+import time
 import torch
 from torchsummaryX import summary
+import wandb
 
 import dataset_location
 import losses
@@ -12,23 +15,25 @@ from model import SingleViewto3D
 from r2n2_custom import R2N2
 
 
+# python train_model.py --type vox --save_freq 2000 --log_freq 100 --batch_size 4 --num_workers 8
 def get_args_parser():
-    parser = argparse.ArgumentParser('Singleto3D', add_help=False)
+    parser = argparse.ArgumentParser("Singleto3D", add_help=False)
     # Model parameters
-    parser.add_argument('--arch', default='resnet18', type=str)
-    parser.add_argument('--lr', default=4e-4, type=float)
-    parser.add_argument('--max_iter', default=10000, type=int)
-    parser.add_argument('--log_freq', default=100, type=int)
-    parser.add_argument('--batch_size', default=2, type=int)
-    parser.add_argument('--num_workers', default=0, type=int)
-    parser.add_argument('--type', default='vox', choices=['vox', 'point', 'mesh'], type=str)
-    parser.add_argument('--n_points', default=5000, type=int)
-    parser.add_argument('--w_chamfer', default=1.0, type=float)
-    parser.add_argument('--w_smooth', default=0.1, type=float)
-    parser.add_argument('--save_freq', default=2000, type=int)
-    parser.add_argument('--device', default='cuda', type=str)
-    parser.add_argument('--load_feat', action='store_true')
-    parser.add_argument('--load_checkpoint', action='store_true')
+    parser.add_argument("-n", "--name", default="run", help="Human readable name for this run")
+    parser.add_argument("--arch", default="resnet18", type=str)
+    parser.add_argument("--lr", default=4e-4, type=float)
+    parser.add_argument("--max_iter", default=10000, type=int)
+    parser.add_argument("--log_freq", default=100, type=int)
+    parser.add_argument("--batch_size", default=2, type=int)
+    parser.add_argument("--num_workers", default=0, type=int)
+    parser.add_argument("--type", default="vox", choices=["vox", "point", "mesh"], type=str)
+    parser.add_argument("--n_points", default=5000, type=int)
+    parser.add_argument("--w_chamfer", default=1.0, type=float)
+    parser.add_argument("--w_smooth", default=0.1, type=float)
+    parser.add_argument("--save_freq", default=2000, type=int)
+    parser.add_argument("--device", default="cuda", type=str)
+    parser.add_argument("--load_feat", action="store_true")
+    parser.add_argument("--load_checkpoint", action="store_true")
     return parser
 
 
@@ -105,6 +110,22 @@ def train_model(args):
         start_iter = checkpoint['step']
         print(f"Succesfully loaded iter {start_iter}")
 
+    # ============ prepare reporter ... ============
+    keyfile = Path("/workspace/wandb.json")
+    assert keyfile.is_file(), \
+           f"Need to populate {keyfile} with json containing wandb key"
+    wandb.login(key=json.load(keyfile.open("r"))["key"])
+    run = wandb.init(
+        name=args.name,
+        project="l43d",
+        entity="franzericschneider",
+        config=vars(args),
+    )
+    # Save the model
+    with open("model_arch.txt", "w") as arch_file:
+        file_write = arch_file.write(str(model))
+    wandb.save("model_arch.txt")
+
     print("Starting training !")
     for step in range(start_iter, args.max_iter):
         iter_start_time = time.time()
@@ -129,19 +150,24 @@ def train_model(args):
         iter_time = time.time() - iter_start_time
 
         if (step % args.save_freq) == 0:
-            torch.save({
-                'step': step,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()
-                }, f'checkpoint_{args.type}.pth')
+            file = f"checkpoint_{args.type}.pth"
+            torch.save({"step": step,
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict()},
+                       file)
+            wandb.save(file)
 
         if (step % args.log_freq) == 0:
             print("[%4d/%4d]; ttime: %.0f (%.2f, %.2f); loss: %.3f" % (step, args.max_iter, total_time, read_time, iter_time, loss.cpu().item()))
+            wandb.log({
+                "lr": optimizer.param_groups[0]["lr"],  # TODO: Update if scheduler
+                "train-loss": loss.cpu().item(),
+            })
 
         del feed_dict, images_gt, ground_truth_3d, prediction_3d
         torch.cuda.empty_cache()
 
-    print('Done!')
+    print("Done!")
 
 
 if __name__ == '__main__':
