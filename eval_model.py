@@ -1,4 +1,5 @@
 import argparse
+import imageio
 import time
 import torch
 from  pytorch3d.datasets.r2n2.utils import collate_batched_R2N2
@@ -96,7 +97,10 @@ def evaluate(predictions, mesh_gt, thresholds, args):
     if args.type == "vox":
         voxels_src = predictions
         H, W, D = voxels_src.shape[2:]
-        vertices_src, faces_src = mcubes.marching_cubes(voxels_src.detach().cpu().squeeze().numpy(), isovalue=0)
+        vertices_src, faces_src = mcubes.marching_cubes(
+            voxels_src.detach().cpu().squeeze().numpy(),
+            isovalue=0.5
+        )
         vertices_src = torch.tensor(vertices_src).float()
         faces_src = torch.tensor(faces_src.astype(int))
         mesh_src = pytorch3d.structures.Meshes([vertices_src], [faces_src])
@@ -168,17 +172,28 @@ def evaluate_model(args):
         metrics = evaluate(predictions, mesh_gt, thresholds, args)
 
         if (step % args.vis_freq) == 0:
-            # TODO: Do images_gt
-            # TODO: Do mesh_gt
+
             if args.type == "vox":
-                render = spinning_mesh(
+
+                kwargs = {"device": args.device,
+                          "dist": 2,
+                          "num_views": 6,
+                          "elev": 15}
+                pred_images = spinning_mesh(
                     *utils_vox.voxels_to_mesh(predictions[0][0]),
-                    device=args.device,
-                    num_views=1
-                )[0]
-            file = f'vis/{step}_{args.type}.png'
-            plt.imsave(file, render)
-            print("Saved render to", file)
+                    **kwargs,
+                )
+                gt_images = spinning_mesh(
+                    mesh_gt.verts_list()[0],
+                    mesh_gt.faces_list()[0],
+                    **kwargs,
+                )
+                renders = hzip(gt_images, pred_images)
+
+            file = f"vis/{step}_{args.type}_gt"
+            imageio.mimsave(file+".gif", renders, fps=3)
+            plt.imsave(file+".png", images_gt[0].cpu().numpy())
+            print("Saved renders to", file)
 
         total_time = time.time() - start_time
         iter_time = time.time() - iter_start_time

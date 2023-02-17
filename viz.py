@@ -86,6 +86,13 @@ def spinning_mesh(verts, faces, device, image_size=256, num_views=60, dist=4,
     if faces.device != "cpu":
         faces = faces.detach().cpu()
 
+    # Empty mesh, render white
+    if len(verts) == 0:
+        return [
+            numpy.ones((image_size, image_size, 3), dtype=numpy.uint8) * 255
+            for _ in range(num_views)
+        ]
+
     # Colormap
     norms = numpy.linalg.norm(verts, axis=1)
     scalarmap = cm.ScalarMappable(

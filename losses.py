@@ -11,7 +11,6 @@ def voxel_loss(voxel_src, voxel_tgt):
         voxel_tgt: b x h x w x d, float32 tensor with values 0-1
     '''
     loss = torch.nn.BCELoss()
-    sigmoid = torch.nn.Sigmoid()
     return loss(voxel_src, voxel_tgt)
 
 

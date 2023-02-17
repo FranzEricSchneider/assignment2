@@ -36,7 +36,7 @@ def fit_voxel(voxels_src, voxels_tgt, args):
     for step in range(start_iter, args.max_iter):
         iter_start_time = time.time()
 
-        loss = losses.voxel_loss(sigmoid(voxels_src), voxels_tgt)
+        loss = losses.voxel_loss(torch.nn.functional.sigmoid(voxels_src), voxels_tgt)
 
         optimizer.zero_grad()
         loss.backward()

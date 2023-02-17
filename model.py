@@ -108,10 +108,10 @@ class VoxNetwork(nn.Module):
             # https://datascience.stackexchange.com/questions/6107/what-are-deconvolutional-layers
             nn.ConvTranspose3d(in_channels=8, out_channels=4, kernel_size=3, stride=2, padding=1), # 8 > 15
             nn.ConvTranspose3d(in_channels=4, out_channels=1, kernel_size=3, stride=2, padding=0, output_padding=1), # 15 > 31+1
+            nn.Sigmoid()
         )
-        # TODO: Try 
         # TODO: Make overfit mechanism
-        # TODO: Add sigmoid at the end and take it out of loss
+        # TODO: Print network size
         # TODO: Add non-linearities
         # TODO: Make it DEEPER
         # TODO: Read the paper: https://arxiv.org/pdf/1603.08637.pdf
