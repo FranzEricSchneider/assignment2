@@ -168,7 +168,7 @@ def get_inbounds(xyz, Z, Y, X, already_mem=False):
     return inbounds.bool()
 
 
-def voxels_to_mesh(voxels, isovalue=0, minval=-1, maxval=1):
+def voxels_to_mesh(voxels, isovalue=0.5, minval=-1, maxval=1):
 
     voxels_cpu = voxels.detach().cpu()
     verts, faces = mcubes.marching_cubes(

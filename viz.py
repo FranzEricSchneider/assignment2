@@ -177,3 +177,30 @@ def spin_cams(num_views, dist, elev, device):
 def numpy_images(iterable):
     return [(image.detach().cpu().numpy()[:, :, :3] * 255).astype(numpy.uint8)
             for image in iterable]
+
+
+def plot_3d_voxels(voxels, path, alpha=0.05, cutoff=0.1):
+    figure = pyplot.figure()
+    axis = figure.add_subplot(projection='3d')
+    scalarmap = cm.ScalarMappable(
+        norm=colors.Normalize(vmin=0, vmax=1),
+        cmap=pyplot.get_cmap("plasma"), # jet, gist_rainbow
+    )
+    x = []
+    y = []
+    z = []
+    c = []
+    for i, xval in enumerate(numpy.linspace(-1, 1, voxels.shape[0])):
+        for j, yval in enumerate(numpy.linspace(-1, 1, voxels.shape[1])):
+            for k, zval in enumerate(numpy.linspace(-1, 1, voxels.shape[2])):
+                value = voxels[i, j, k].cpu().item()
+                if value > cutoff:
+                    x.append(xval)
+                    y.append(yval)
+                    z.append(zval)
+                    # Add a specific (low) alpha value
+                    rgb = scalarmap.to_rgba(value)[:3]
+                    alpha = numpy.clip(value, alpha, 1.0)
+                    c.append(rgb + (alpha,))
+    axis.scatter(x, y, z, c=c)
+    figure.savefig(path)

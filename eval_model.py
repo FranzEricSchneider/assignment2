@@ -13,13 +13,13 @@ import dataset_location
 from model import SingleViewto3D
 from r2n2_custom import R2N2
 import utils_vox
-from viz import hzip, spinning_mesh, spinning_points
+from viz import hzip, plot_3d_voxels, spinning_mesh, spinning_points
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Singleto3D', add_help=False)
     parser.add_argument('--arch', default='resnet18', type=str)
-    parser.add_argument('--max_iter', default=10000, type=int)
+    parser.add_argument('--max_iter', default=0, type=int, help="If non-zero, limit number of evaluations")
     parser.add_argument('--vis_freq', default=100, type=int)
     parser.add_argument('--batch_size', default=1, type=int)
     parser.add_argument('--num_workers', default=0, type=int)
@@ -30,6 +30,7 @@ def get_args_parser():
     parser.add_argument('--load_checkpoint', action='store_true')
     parser.add_argument('--device', default='cuda', type=str)
     parser.add_argument('--load_feat', action='store_true')
+    parser.add_argument('--ipdb', action='store_true')
     return parser
 
 
@@ -151,8 +152,7 @@ def evaluate_model(args):
         print(f"Succesfully loaded iter {start_iter}")
 
     print("Starting evaluating [FIX FULL LEN]!")
-    # max_iter = len(eval_loader)
-    max_iter = 10
+    max_iter = (len(eval_loader) if args.max_iter == 0 else args.max_iter)
     for step in range(start_iter, max_iter):
         iter_start_time = time.time()
 
@@ -171,7 +171,12 @@ def evaluate_model(args):
 
         metrics = evaluate(predictions, mesh_gt, thresholds, args)
 
+        if args.ipdb:
+            import ipdb
+            ipdb.set_trace()
+
         if (step % args.vis_freq) == 0:
+            file = f"vis/{step}_{args.type}"
 
             if args.type == "vox":
 
@@ -179,20 +184,21 @@ def evaluate_model(args):
                           "dist": 2,
                           "num_views": 6,
                           "elev": 15}
-                pred_images = spinning_mesh(
-                    *utils_vox.voxels_to_mesh(predictions[0][0]),
-                    **kwargs,
-                )
                 gt_images = spinning_mesh(
                     mesh_gt.verts_list()[0],
                     mesh_gt.faces_list()[0],
                     **kwargs,
                 )
+                pred_images = spinning_mesh(
+                    *utils_vox.voxels_to_mesh(predictions[0][0]),
+                    **kwargs,
+                )
                 renders = hzip(gt_images, pred_images)
 
-            file = f"vis/{step}_{args.type}_gt"
+                plot_3d_voxels(predictions[0][0], file + "_voxels.png")
+
             imageio.mimsave(file+".gif", renders, fps=3)
-            plt.imsave(file+".png", images_gt[0].cpu().numpy())
+            plt.imsave(file+"_gt.png", images_gt[0].cpu().numpy())
             print("Saved renders to", file)
 
         total_time = time.time() - start_time

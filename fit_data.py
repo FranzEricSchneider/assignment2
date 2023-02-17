@@ -51,8 +51,8 @@ def fit_voxel(voxels_src, voxels_tgt, args):
             print("[%4d/%4d]; ttime: %.0f (%.2f); loss: %.3f" % (step, args.max_iter, total_time,  iter_time, loss_vis))
 
     kwargs = {"device": args.device, "dist": 2}
-    gt_images = spinning_mesh(*voxels_to_mesh(voxels_tgt[0]), **kwargs)
-    pred_images = spinning_mesh(*voxels_to_mesh(voxels_src[0]), **kwargs)
+    gt_images = spinning_mesh(*voxels_to_mesh(voxels_tgt[0], isovalue=0), **kwargs)
+    pred_images = spinning_mesh(*voxels_to_mesh(voxels_src[0], isovalue=0), **kwargs)
     imageio.mimsave("assignment2_q1_p1.gif", hzip(gt_images, pred_images), fps=20)
     print('Saved!')
 
