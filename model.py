@@ -13,7 +13,9 @@ class SingleViewto3D(nn.Module):
         super(SingleViewto3D, self).__init__()
         self.device = args.device
         if not args.load_feat:
-            vision_model = torchvision_models.__dict__[args.arch](weights=True)
+            vision_model = torchvision_models.__dict__[args.arch](
+                weights=torchvision_models.ResNet18_Weights.DEFAULT
+            )
             self.encoder = torch.nn.Sequential(*(list(vision_model.children())[:-1]))
             self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
 
@@ -71,7 +73,7 @@ class SingleViewto3D(nn.Module):
 # Learning a predictable and generative vector representation for objects
 class VoxNetwork(nn.Module):
 
-    def __init__(self, input_size, start_channels=8, dropout=0.001):
+    def __init__(self, input_size, start_channels=8, dropout=0.1):
 
         self.start_channels = start_channels
         self.start_3d_shape = (8, 8, 8)
@@ -83,39 +85,80 @@ class VoxNetwork(nn.Module):
             nn.Linear(input_size, 1024),
             nn.BatchNorm1d(num_features=1024),
             nn.Dropout(p=dropout),
-            nn.Softplus(),
+            nn.ReLU(),
 
             nn.Linear(1024, 2048),
             nn.BatchNorm1d(num_features=2048),
             nn.Dropout(p=dropout),
-            nn.Softplus(),
+            nn.ReLU(),
 
             nn.Linear(2048, self.linear_out),
             nn.BatchNorm1d(num_features=self.linear_out),
             nn.Dropout(p=dropout),
-            nn.Softplus(),
+            nn.ReLU(),
         )
+        # TODO: Read this:
+        # https://datascience.stackexchange.com/questions/6107/what-are-deconvolutional-layers
         # def convtrans(d, pad, dil, kern, stride, opad):
         #     return (d-1)*stride - (2*pad) + (dil*(kern-1)) + opad + 1
         # def conv(d, pad, dil, kern, stride):
         #     import math
         #     return math.floor((d + (2 * pad) - dil*(kern - 1) - 1) / stride + 1
         # )
+        # self.upconvs = nn.Sequential(*(
+        #     (
+        #         [  # 8 > 10 > 12 > 14
+        #             nn.ConvTranspose3d(in_channels=8, out_channels=8, kernel_size=3, stride=1, padding=0),
+        #             nn.BatchNorm3d(num_features=8),
+        #             nn.Dropout(p=dropout),
+        #             nn.ReLU(),
+        #         ] * 3
+        #     ) + [  # 14 > 16
+        #         nn.ConvTranspose3d(in_channels=8, out_channels=4, kernel_size=3, stride=1, padding=0),
+        #         nn.BatchNorm3d(num_features=4),
+        #         nn.Dropout(p=dropout),
+        #         nn.ReLU(),
+        #     ] + (
+        #         [  # 16 > 18 > 20 > 22
+        #             nn.ConvTranspose3d(in_channels=4, out_channels=4, kernel_size=3, stride=1, padding=0),
+        #             nn.BatchNorm3d(num_features=4),
+        #             nn.Dropout(p=dropout),
+        #             nn.ReLU(),
+        #         ] * 3
+        #     ) + [  # 22 > 24
+        #         nn.ConvTranspose3d(in_channels=4, out_channels=2, kernel_size=3, stride=1, padding=0),
+        #         nn.BatchNorm3d(num_features=2),
+        #         nn.Dropout(p=dropout),
+        #         nn.ReLU(),
+        #     ] + (
+        #         [  # 24 > 26 > 28 > 30
+        #             nn.ConvTranspose3d(in_channels=2, out_channels=2, kernel_size=3, stride=1, padding=0),
+        #             nn.BatchNorm3d(num_features=2),
+        #             nn.Dropout(p=dropout),
+        #             nn.ReLU(),
+        #         ] * 3
+        #     ) + [  # 30 > 32
+        #         nn.ConvTranspose3d(in_channels=2, out_channels=1, kernel_size=3, stride=1, padding=0),
+        #         nn.BatchNorm3d(num_features=1),
+        #         nn.Dropout(p=dropout),
+        #         nn.Sigmoid(),
+        #     ]
+        # ))
         self.upconvs = nn.Sequential(
-            # How to calculate the next size
-            # (d-1)*stride - (2*pad) + (dil*(kern-1)) + 1
-            # TODO: Read this:
-            # https://datascience.stackexchange.com/questions/6107/what-are-deconvolutional-layers
             nn.ConvTranspose3d(in_channels=8, out_channels=4, kernel_size=3, stride=2, padding=1), # 8 > 15
+            nn.BatchNorm3d(num_features=4),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
             nn.ConvTranspose3d(in_channels=4, out_channels=1, kernel_size=3, stride=2, padding=0, output_padding=1), # 15 > 31+1
+            nn.BatchNorm3d(num_features=1),
+            nn.Dropout(p=dropout),
             nn.Sigmoid()
         )
         # TODO: Read the paper: https://arxiv.org/pdf/1603.08637.pdf
         # TODO: Make overfit mechanism
         # TODO: Hook it up to wandb
-        # TODO: Add non-linearities
-        # TODO: Make it DEEPER
-        # TODO: Try batchnorms
+        # TODO: Make it DEEPER (figure out why crashing)
+        # TODO: Try on AWS
 
 
     def forward(self, x):

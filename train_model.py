@@ -1,4 +1,5 @@
 import argparse
+import gc
 import time
 from  pytorch3d.datasets.r2n2.utils import collate_batched_R2N2
 from pytorch3d.ops import sample_points_from_meshes
@@ -87,6 +88,11 @@ def train_model(args):
     model_summary = summary(model, summary_ims.to(args.device), args)
     print(model_summary)
 
+    # ============ print model information ... ============
+    # Garbage collect
+    torch.cuda.empty_cache()
+    gc.collect()
+
     # ============ preparing optimizer ... ============
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     start_iter = 0
@@ -107,9 +113,7 @@ def train_model(args):
             train_loader = iter(loader)
 
         read_start_time = time.time()
-
         feed_dict = next(train_loader)
-
         images_gt, ground_truth_3d = preprocess(feed_dict,args)
         read_time = time.time() - read_start_time
 
@@ -124,8 +128,6 @@ def train_model(args):
         total_time = time.time() - start_time
         iter_time = time.time() - iter_start_time
 
-        loss_vis = loss.cpu().item()
-
         if (step % args.save_freq) == 0:
             torch.save({
                 'step': step,
@@ -134,7 +136,10 @@ def train_model(args):
                 }, f'checkpoint_{args.type}.pth')
 
         if (step % args.log_freq) == 0:
-            print("[%4d/%4d]; ttime: %.0f (%.2f, %.2f); loss: %.3f" % (step, args.max_iter, total_time, read_time, iter_time, loss_vis))
+            print("[%4d/%4d]; ttime: %.0f (%.2f, %.2f); loss: %.3f" % (step, args.max_iter, total_time, read_time, iter_time, loss.cpu().item()))
+
+        del feed_dict, images_gt, ground_truth_3d, prediction_3d
+        torch.cuda.empty_cache()
 
     print('Done!')
 
