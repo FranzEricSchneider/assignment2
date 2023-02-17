@@ -1,10 +1,12 @@
+import numpy
+import pytorch3d
+from pytorch3d.utils import ico_sphere
 from torchvision import models as torchvision_models
 from torchvision import transforms
 import time
 import torch.nn as nn
 import torch
-from pytorch3d.utils import ico_sphere
-import pytorch3d
+
 
 class SingleViewto3D(nn.Module):
     def __init__(self, args):
@@ -15,28 +17,25 @@ class SingleViewto3D(nn.Module):
             self.encoder = torch.nn.Sequential(*(list(vision_model.children())[:-1]))
             self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
 
-
         # define decoder
         if args.type == "vox":
             # Input: b x 512
             # Output: b x 1 x 32 x 32 x 32
-            pass
-            # TODO:
-            # self.decoder =             
+            self.decoder = VoxNetwork(512)
         elif args.type == "point":
             # Input: b x 512
-            # Output: b x args.n_points x 3  
+            # Output: b x args.n_points x 3
             self.n_point = args.n_points
             # TODO:
-            # self.decoder =             
+            # self.decoder =
         elif args.type == "mesh":
             # Input: b x 512
-            # Output: b x mesh_pred.verts_packed().shape[0] x 3  
+            # Output: b x mesh_pred.verts_packed().shape[0] x 3
             # try different mesh initializations
             mesh_pred = ico_sphere(4, self.device)
             self.mesh_pred = pytorch3d.structures.Meshes(mesh_pred.verts_list()*args.batch_size, mesh_pred.faces_list()*args.batch_size)
             # TODO:
-            # self.decoder =             
+            # self.decoder =
 
     def forward(self, images, args):
         results = dict()
@@ -54,9 +53,7 @@ class SingleViewto3D(nn.Module):
 
         # call decoder
         if args.type == "vox":
-            # TODO:
-            # voxels_pred =             
-            return voxels_pred
+            return self.decoder(encoded_feat)
 
         elif args.type == "point":
             # TODO:
@@ -69,3 +66,68 @@ class SingleViewto3D(nn.Module):
             mesh_pred = self.mesh_pred.offset_verts(deform_vertices_pred.reshape([-1,3]))
             return  mesh_pred          
 
+
+# TODO: Try paper
+# Learning a predictable and generative vector representation for objects
+class VoxNetwork(nn.Module):
+
+    def __init__(self, input_size, start_channels=8, dropout=0.001):
+
+        self.start_channels = start_channels
+        self.start_3d_shape = (8, 8, 8)
+        self.linear_out = self.start_channels * \
+                          numpy.product(self.start_3d_shape)
+
+        super(VoxNetwork, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(input_size, 1024),
+            nn.BatchNorm1d(num_features=1024),
+            nn.Dropout(p=dropout),
+            nn.Softplus(),
+
+            nn.Linear(1024, 2048),
+            nn.BatchNorm1d(num_features=2048),
+            nn.Dropout(p=dropout),
+            nn.Softplus(),
+
+            nn.Linear(2048, self.linear_out),
+            nn.BatchNorm1d(num_features=self.linear_out),
+            nn.Dropout(p=dropout),
+            nn.Softplus(),
+        )
+        # def convtrans(d, pad, dil, kern, stride, opad):
+        #     return (d-1)*stride - (2*pad) + (dil*(kern-1)) + opad + 1
+        # def conv(d, pad, dil, kern, stride):
+        #     import math
+        #     return math.floor((d + (2 * pad) - dil*(kern - 1) - 1) / stride + 1
+        # )
+        self.upconvs = nn.Sequential(
+            # How to calculate the next size
+            # (d-1)*stride - (2*pad) + (dil*(kern-1)) + 1
+            # TODO: Read this:
+            # https://datascience.stackexchange.com/questions/6107/what-are-deconvolutional-layers
+            nn.ConvTranspose3d(in_channels=8, out_channels=4, kernel_size=3, stride=2, padding=1), # 8 > 15
+            nn.ConvTranspose3d(in_channels=4, out_channels=1, kernel_size=3, stride=2, padding=0, output_padding=1), # 15 > 31+1
+        )
+        # TODO: Try 
+        # TODO: Make overfit mechanism
+        # TODO: Add sigmoid at the end and take it out of loss
+        # TODO: Add non-linearities
+        # TODO: Make it DEEPER
+        # TODO: Read the paper: https://arxiv.org/pdf/1603.08637.pdf
+        # TODO: Hook it up to wandb
+        # TODO: Try batchnorms
+
+
+    def forward(self, x):
+
+        # Linear layers
+        x = self.linear(x)
+
+        # Reshape operation
+        num_batches = x.shape[0]
+        x = x.reshape((num_batches, self.start_channels) + self.start_3d_shape)
+
+        # Upsampling
+        x = self.upconvs(x)
+        return x

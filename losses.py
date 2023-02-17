@@ -12,7 +12,7 @@ def voxel_loss(voxel_src, voxel_tgt):
     '''
     loss = torch.nn.BCELoss()
     sigmoid = torch.nn.Sigmoid()
-    return loss(sigmoid(voxel_src), voxel_tgt)
+    return loss(voxel_src, voxel_tgt)
 
 
 def chamfer_loss(point_cloud_src, point_cloud_tgt):
