@@ -121,6 +121,7 @@ def evaluate(predictions, mesh_gt, thresholds, args):
 
 
 def evaluate_model(args):
+
     r2n2_dataset = R2N2("test", dataset_location.SHAPENET_PATH, dataset_location.R2N2_PATH, dataset_location.SPLITS_PATH, return_voxels=True, return_feats=args.load_feat)
 
     loader = torch.utils.data.DataLoader(
@@ -181,21 +182,26 @@ def evaluate_model(args):
             if args.type == "vox":
 
                 kwargs = {"device": args.device,
-                          "dist": 2,
+                          "dist": 3,
                           "num_views": 6,
                           "elev": 15}
                 gt_images = spinning_mesh(
-                    mesh_gt.verts_list()[0],
-                    mesh_gt.faces_list()[0],
+                    *utils_vox.voxels_to_mesh(feed_dict["voxels"].float()[0][0]),
                     **kwargs,
                 )
+                # gt_images = spinning_mesh(
+                #     mesh_gt.verts_list()[0],
+                #     mesh_gt.faces_list()[0],
+                #     **kwargs,
+                # )
                 pred_images = spinning_mesh(
                     *utils_vox.voxels_to_mesh(predictions[0][0]),
                     **kwargs,
                 )
                 renders = hzip(gt_images, pred_images)
-
-                plot_3d_voxels(predictions[0][0], file + "_voxels.png")
+                plot_3d_voxels(predictions[0][0],
+                               file + "_voxels.png",
+                               cutoff=0.3)
 
             imageio.mimsave(file+".gif", renders, fps=3)
             plt.imsave(file+"_gt.png", images_gt[0].cpu().numpy())

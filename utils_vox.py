@@ -170,9 +170,9 @@ def get_inbounds(xyz, Z, Y, X, already_mem=False):
 
 def voxels_to_mesh(voxels, isovalue=0.5, minval=-1, maxval=1):
 
-    voxels_cpu = voxels.detach().cpu()
+    voxels_cpu = voxels.detach().cpu().numpy()
     verts, faces = mcubes.marching_cubes(
-        mcubes.smooth(voxels_cpu),
+        voxels_cpu,
         isovalue=isovalue,
     )
 

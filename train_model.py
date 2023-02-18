@@ -34,6 +34,8 @@ def get_args_parser():
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--load_feat", action="store_true")
     parser.add_argument("--load_checkpoint", action="store_true")
+    parser.add_argument("-v", "--vis_training", action="store_true", help="Save training images (slow)")
+    parser.add_argument("-w", "--disable_wandb", action="store_true")
     return parser
 
 
@@ -56,11 +58,11 @@ def preprocess(feed_dict,args):
 
 
 def calculate_loss(predictions, ground_truth, args):
-    if args.type == 'vox':
+    if args.type == "vox":
         loss = losses.voxel_loss(predictions,ground_truth)
-    elif args.type == 'point':
+    elif args.type == "point":
         loss = losses.chamfer_loss(predictions, ground_truth)
-    elif args.type == 'mesh':
+    elif args.type == "mesh":
         sample_trg = sample_points_from_meshes(ground_truth, args.n_points)
         sample_pred = sample_points_from_meshes(predictions, args.n_points)
 
@@ -80,7 +82,9 @@ def train_model(args):
         num_workers=args.num_workers,
         collate_fn=collate_batched_R2N2,
         pin_memory=True,
-        drop_last=True)
+        drop_last=True,
+        shuffle=True,
+    )
     train_loader = iter(loader)
 
     model =  SingleViewto3D(args)
@@ -111,20 +115,22 @@ def train_model(args):
         print(f"Succesfully loaded iter {start_iter}")
 
     # ============ prepare reporter ... ============
-    keyfile = Path("/workspace/wandb.json")
-    assert keyfile.is_file(), \
-           f"Need to populate {keyfile} with json containing wandb key"
-    wandb.login(key=json.load(keyfile.open("r"))["key"])
-    run = wandb.init(
-        name=args.name,
-        project="l43d",
-        entity="franzericschneider",
-        config=vars(args),
-    )
-    # Save the model
-    with open("model_arch.txt", "w") as arch_file:
-        file_write = arch_file.write(str(model))
-    wandb.save("model_arch.txt")
+    use_wandb = not args.disable_wandb
+    if use_wandb:
+        keyfile = Path("/workspace/wandb.json")
+        assert keyfile.is_file(), \
+               f"Need to populate {keyfile} with json containing wandb key"
+        wandb.login(key=json.load(keyfile.open("r"))["key"])
+        run = wandb.init(
+            name=args.name,
+            project="l43d",
+            entity="franzericschneider",
+            config=vars(args),
+        )
+        # Save the model
+        with open("model_arch.txt", "w") as arch_file:
+            file_write = arch_file.write(str(model))
+        wandb.save("model_arch.txt")
 
     print("Starting training !")
     for step in range(start_iter, args.max_iter):
@@ -137,6 +143,10 @@ def train_model(args):
         feed_dict = next(train_loader)
         images_gt, ground_truth_3d = preprocess(feed_dict,args)
         read_time = time.time() - read_start_time
+        if args.vis_training:
+            from matplotlib import pyplot
+            for i, imgt in enumerate(images_gt):
+                pyplot.imsave(f"vis/train_{step}_{i}_gt.png", imgt.cpu().numpy())
 
         prediction_3d = model(images_gt, args)
 
@@ -155,17 +165,22 @@ def train_model(args):
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict()},
                        file)
-            wandb.save(file)
+            if use_wandb:
+                wandb.save(file)
 
         if (step % args.log_freq) == 0:
             print("[%4d/%4d]; ttime: %.0f (%.2f, %.2f); loss: %.3f" % (step, args.max_iter, total_time, read_time, iter_time, loss.cpu().item()))
-            wandb.log({
-                "lr": optimizer.param_groups[0]["lr"],  # TODO: Update if scheduler
-                "train-loss": loss.cpu().item(),
-            })
+            if use_wandb:
+                wandb.log({
+                    "lr": optimizer.param_groups[0]["lr"],  # TODO: Update if scheduler
+                    "train-loss": loss.cpu().item(),
+                })
 
         del feed_dict, images_gt, ground_truth_3d, prediction_3d
         torch.cuda.empty_cache()
+
+    if use_wandb:
+        run.finish()
 
     print("Done!")
 
